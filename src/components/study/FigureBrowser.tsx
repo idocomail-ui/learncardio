@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -115,42 +114,25 @@ export default function FigureBrowser({ guideline, figures, initialProgress }: P
           </div>
         </div>
 
-        {/* Figure image */}
-        <div className="relative w-full bg-slate-50 dark:bg-slate-950" style={{ minHeight: 280 }}>
-          {figure.image_url ? (
-            <Image
-              src={figure.image_url}
-              alt={`Figure ${figure.figure_number}`}
-              width={800}
-              height={600}
-              className="w-full h-auto object-contain"
-              priority
-            />
-          ) : (
-            <div className="flex items-center justify-center h-48 text-slate-400">
-              Image not available
-            </div>
-          )}
-        </div>
-
         {/* Caption */}
-        <div className="px-4 py-3 border-t">
-          <p className="text-sm text-slate-600 dark:text-slate-400 italic">
+        <div className="px-4 py-4 border-t">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Caption</p>
+          <p className="text-sm text-slate-700 italic leading-relaxed">
             {figure.caption_original}
           </p>
         </div>
 
-        {/* Explanation toggle */}
+        {/* Explanation */}
         <div className="px-4 pb-4">
           <button
             onClick={() => setShowExplanation((s) => !s)}
-            className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-sm font-medium text-blue-600 hover:underline"
           >
             {showExplanation ? "Hide explanation" : "Show explanation"}
           </button>
 
           {showExplanation && figure.caption_explanation && (
-            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+            <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-slate-700 leading-relaxed">
               {figure.caption_explanation}
             </div>
           )}

@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Force class-based dark mode so dark: utilities never apply (no .dark class is added) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* ESC guideline class colors */
   --color-class-i:   #16a34a;
