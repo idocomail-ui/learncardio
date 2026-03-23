@@ -9,7 +9,6 @@
 
 import fs from "fs";
 import path from "path";
-import * as canvas from "canvas";
 
 const PDF_DIR = path.join(process.cwd(), "data/pdfs");
 const FIGURES_DIR = path.join(process.cwd(), "data/figures");
@@ -55,84 +54,50 @@ async function extractPageTexts(pdfPath: string): Promise<string[]> {
   return pageTexts;
 }
 
+function isTocPage(text: string): boolean {
+  // TOC pages have many dot sequences like "Figure 1 .............. 42"
+  const dotSequences = (text.match(/\.{5,}/g) ?? []).length;
+  return dotSequences >= 3;
+}
+
 function findFigurePages(
   pageTexts: string[]
 ): Array<{ page: number; caption: string; figureNumber: number }> {
-  const results: Array<{ page: number; caption: string; figureNumber: number }> = [];
-  const seen = new Set<number>();
-  // Only match figure numbers 1-150 to avoid false positives like "Figure 4052"
+  // Map figureNumber -> all occurrences (page, caption)
+  const occurrences = new Map<number, Array<{ page: number; caption: string }>>();
   const figureRegex = /\b(?:Figure|Fig\.?)\s+(\d{1,3})\b/gi;
 
   for (let i = 0; i < pageTexts.length; i++) {
+    const text = pageTexts[i];
+    // Skip TOC pages — they list all figures but aren't the actual figure pages
+    if (isTocPage(text)) continue;
+
     let match: RegExpExecArray | null;
     figureRegex.lastIndex = 0;
 
-    while ((match = figureRegex.exec(pageTexts[i])) !== null) {
+    while ((match = figureRegex.exec(text)) !== null) {
       const figureNumber = parseInt(match[1], 10);
       if (figureNumber < 1 || figureNumber > 150) continue;
-      if (!seen.has(figureNumber)) {
-        seen.add(figureNumber);
-        const afterMatch = pageTexts[i].slice(match.index, match.index + 200);
-        results.push({
-          page: i + 1,
-          caption: afterMatch.trim().slice(0, 180),
-          figureNumber,
-        });
-      }
+      const afterMatch = text.slice(match.index, match.index + 300);
+      // Skip if this looks like a reference within a TOC-style line
+      if (/\.{5,}/.test(afterMatch)) continue;
+      if (!occurrences.has(figureNumber)) occurrences.set(figureNumber, []);
+      occurrences.get(figureNumber)!.push({
+        page: i + 1,
+        caption: afterMatch.trim().slice(0, 180),
+      });
     }
+  }
+
+  // For each figure, pick the first non-TOC occurrence (the actual figure page)
+  const results: Array<{ page: number; caption: string; figureNumber: number }> = [];
+  for (const [figureNumber, occ] of occurrences.entries()) {
+    results.push({ figureNumber, ...occ[0] });
   }
 
   return results.sort((a, b) => a.figureNumber - b.figureNumber);
 }
 
-async function renderPageAsPng(
-  pdfPath: string,
-  pageNum: number,
-  outputPath: string,
-  scale = 2.0
-): Promise<void> {
-  const pdfjsLib = await getPdfjsLib();
-  const data = new Uint8Array(fs.readFileSync(pdfPath));
-  const doc = await pdfjsLib.getDocument({ data }).promise;
-  const page = await doc.getPage(pageNum);
-  const viewport = page.getViewport({ scale });
-
-  // Create canvas
-  const canvasEl = canvas.createCanvas(
-    Math.floor(viewport.width),
-    Math.floor(viewport.height)
-  );
-  const ctx = canvasEl.getContext("2d");
-
-  // White background
-  ctx.fillStyle = "white";
-  ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
-
-  // pdfjs needs a special canvas factory
-  const canvasFactory = {
-    create(w: number, h: number) {
-      const c = canvas.createCanvas(w, h);
-      return { canvas: c, context: c.getContext("2d") };
-    },
-    reset(pair: { canvas: ReturnType<typeof canvas.createCanvas>; context: ReturnType<ReturnType<typeof canvas.createCanvas>["getContext"]> }, w: number, h: number) {
-      pair.canvas.width = w;
-      pair.canvas.height = h;
-    },
-    destroy() {},
-  };
-
-  const renderTask = page.render({
-    canvasContext: ctx as unknown as CanvasRenderingContext2D,
-    viewport,
-    canvasFactory,
-  } as Parameters<typeof page.render>[0]);
-
-  await renderTask.promise;
-
-  // Save as PNG
-  const buffer = canvasEl.toBuffer("image/png");
-  fs.writeFileSync(outputPath, buffer);
-}
 
 async function processPDF(pdfFile: string): Promise<FigureEntry[]> {
   const pdfPath = path.join(PDF_DIR, pdfFile);
@@ -149,30 +114,20 @@ async function processPDF(pdfFile: string): Promise<FigureEntry[]> {
 
   console.log(`   Found ${figurePagesFound.length} figures across ${pageTexts.length} pages`);
 
-  const entries: FigureEntry[] = [];
-
-  for (const fig of figurePagesFound) {
+  // Only build the manifest — rendering is done by render-figures.py (PyMuPDF)
+  return figurePagesFound.map((fig) => {
     const outputPath = path.join(outputDir, `fig_${fig.figureNumber}.png`);
     const relPath = path.relative(process.cwd(), outputPath);
-
-    console.log(`   Rendering Figure ${fig.figureNumber} (page ${fig.page})...`);
-
-    try {
-      await renderPageAsPng(pdfPath, fig.page, outputPath);
-      entries.push({
-        guideline: guidelineName,
-        guidelineSlug: slug,
-        figureNumber: fig.figureNumber,
-        caption: fig.caption,
-        page: fig.page,
-        imagePath: relPath,
-      });
-    } catch (err) {
-      console.warn(`   ⚠️  Failed Figure ${fig.figureNumber}:`, (err as Error).message);
-    }
-  }
-
-  return entries;
+    console.log(`   Figure ${fig.figureNumber} → page ${fig.page}`);
+    return {
+      guideline: guidelineName,
+      guidelineSlug: slug,
+      figureNumber: fig.figureNumber,
+      caption: fig.caption,
+      page: fig.page,
+      imagePath: relPath,
+    };
+  });
 }
 
 async function main() {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -103,15 +104,25 @@ export default function FigureBrowser({ guideline, figures, initialProgress }: P
           </div>
         </div>
 
-        {/* AI Explanation — primary content */}
-        {figure.caption_explanation ? (
-          <div className="px-4 py-4">
+        {/* Figure image */}
+        {figure.image_url && (
+          <div className="bg-white">
+            <Image
+              src={figure.image_url}
+              alt={`Figure ${figure.figure_number}`}
+              width={800}
+              height={600}
+              className="w-full h-auto"
+              priority
+            />
+          </div>
+        )}
+
+        {/* AI Explanation */}
+        {figure.caption_explanation && (
+          <div className="px-4 py-4 border-t">
             <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">AI Explanation</p>
             <p className="text-sm text-slate-700 leading-relaxed">{figure.caption_explanation}</p>
-          </div>
-        ) : (
-          <div className="px-4 py-4">
-            <p className="text-sm text-slate-400 italic">No explanation available.</p>
           </div>
         )}
       </div>
