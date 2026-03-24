@@ -81,54 +81,50 @@ def find_figure_captions_fallback(page):
 
 def get_figure_crop(page, fig_num):
     """
-    Find the bounding box of the figure on the page.
-    Strategy:
-    - Find the caption text block 'Figure X ...' and note its y position
-    - Find all graphic content (images + drawings) above the caption
-    - Return a rect from top of graphics to bottom of caption + small margin
+    Crop to just the figure + caption area.
+    - Find caption 'Figure X' text block → gives bottom boundary
+    - Find topmost image/drawing above the caption → gives top boundary
     Returns None to render full page if crop cannot be determined.
     """
     page_rect = page.rect
     pw, ph = page_rect.width, page_rect.height
 
-    # Find caption block position
-    caption_y0 = None
-    caption_y1 = None
-    blocks = page.get_text("blocks")
-    for block in blocks:
+    # Find caption block
+    caption_y0 = caption_y1 = None
+    for block in page.get_text("blocks"):
         x0, y0, x1, y1, text, *_ = block
         if re.match(rf'^(?:Figure|Fig\.?)\s+{fig_num}\b', text.strip(), re.IGNORECASE):
-            caption_y0 = y0
-            caption_y1 = y1
+            caption_y0, caption_y1 = y0, y1
             break
 
     if caption_y0 is None:
-        return None  # fallback to full page
+        return None
 
-    # Find bounding box of all graphic content above the caption
-    graphic_top = caption_y0  # start pessimistically at caption
+    graphic_top = caption_y0  # fallback: start at caption
 
-    for img in page.get_images(full=True):
-        # get_image_bbox needs xref
-        try:
-            rects = page.get_image_rects(img[0])
-            for r in rects:
-                if r.y1 <= caption_y0 + 20:  # image ends at or before caption
-                    graphic_top = min(graphic_top, r.y0)
-        except Exception:
-            pass
+    # Use get_image_info() — reliable dict-based API with 'bbox' key
+    for info in page.get_image_info():
+        bbox = fitz.Rect(info['bbox'])
+        if bbox.y1 <= caption_y0 + 20 and bbox.height > 10 and bbox.width > 10:
+            graphic_top = min(graphic_top, bbox.y0)
 
-    for drawing in page.get_drawings():
-        r = drawing.get("rect")
-        if r and r.y1 <= caption_y0 + 20:
-            graphic_top = min(graphic_top, r.y0)
+    # If no images found, look for substantial vector drawing clusters
+    if graphic_top >= caption_y0 - 20:
+        for drawing in page.get_drawings():
+            r = drawing.get("rect")
+            if not r:
+                continue
+            # Skip thin decorative lines and full-width dividers
+            if r.height < 5 or r.width < 30:
+                continue
+            if r.y1 <= caption_y0 + 20:
+                graphic_top = min(graphic_top, r.y0)
 
-    # Add margins
-    top = max(0, graphic_top - 10)
+    top = max(0, graphic_top - 12)
     bottom = min(ph, caption_y1 + 15)
 
-    # If crop is less than 15% of page height, fall back to full page
-    if (bottom - top) < ph * 0.15:
+    # Need at least 12% of page height to be a useful crop
+    if (bottom - top) < ph * 0.12:
         return None
 
     return fitz.Rect(0, top, pw, bottom)
