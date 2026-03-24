@@ -79,6 +79,61 @@ def find_figure_captions_fallback(page):
                 found[num] = text[start:start+200].strip()
     return found
 
+def get_figure_crop(page, fig_num):
+    """
+    Find the bounding box of the figure on the page.
+    Strategy:
+    - Find the caption text block 'Figure X ...' and note its y position
+    - Find all graphic content (images + drawings) above the caption
+    - Return a rect from top of graphics to bottom of caption + small margin
+    Returns None to render full page if crop cannot be determined.
+    """
+    page_rect = page.rect
+    pw, ph = page_rect.width, page_rect.height
+
+    # Find caption block position
+    caption_y0 = None
+    caption_y1 = None
+    blocks = page.get_text("blocks")
+    for block in blocks:
+        x0, y0, x1, y1, text, *_ = block
+        if re.match(rf'^(?:Figure|Fig\.?)\s+{fig_num}\b', text.strip(), re.IGNORECASE):
+            caption_y0 = y0
+            caption_y1 = y1
+            break
+
+    if caption_y0 is None:
+        return None  # fallback to full page
+
+    # Find bounding box of all graphic content above the caption
+    graphic_top = caption_y0  # start pessimistically at caption
+
+    for img in page.get_images(full=True):
+        # get_image_bbox needs xref
+        try:
+            rects = page.get_image_rects(img[0])
+            for r in rects:
+                if r.y1 <= caption_y0 + 20:  # image ends at or before caption
+                    graphic_top = min(graphic_top, r.y0)
+        except Exception:
+            pass
+
+    for drawing in page.get_drawings():
+        r = drawing.get("rect")
+        if r and r.y1 <= caption_y0 + 20:
+            graphic_top = min(graphic_top, r.y0)
+
+    # Add margins
+    top = max(0, graphic_top - 10)
+    bottom = min(ph, caption_y1 + 15)
+
+    # If crop is less than 15% of page height, fall back to full page
+    if (bottom - top) < ph * 0.15:
+        return None
+
+    return fitz.Rect(0, top, pw, bottom)
+
+
 def process_pdf(pdf_path, guideline_name):
     slug = slugify(guideline_name)
     out_dir = os.path.join(FIGURES_DIR, slug)
@@ -100,45 +155,31 @@ def process_pdf(pdf_path, guideline_name):
         captions = find_figure_captions(page)
         for num in captions:
             if num not in figure_pages and has_gfx:
-                # Get caption text
                 text = page.get_text()
                 m = re.search(r'(?:Figure|Fig\.?)\s+' + str(num) + r'[.:\s][^\n]{0,200}', text, re.IGNORECASE)
                 caption = m.group(0).strip() if m else f"Figure {num}"
                 figure_pages[num] = (i + 1, caption[:180])
 
-    # Pass 2: fallback — for figure numbers not found yet, search all pages
-    # for caption pattern without requiring graphics on same page
-    all_mentioned = set()
-    caption_only_pages = {}  # figure_num -> list of (page, caption)
+    # Pass 2: fallback for figures not found with graphics requirement
+    caption_only_pages = {}
     for i in range(n_pages):
         page = doc[i]
         text = page.get_text()
         for m in re.finditer(r'(?:^|\n)\s*(?:Figure|Fig\.?)\s+(\d{1,3})[.:\s]', text, re.IGNORECASE | re.MULTILINE):
             num = int(m.group(1))
-            if 1 <= num <= 150:
-                all_mentioned.add(num)
-                if num not in figure_pages:
-                    caption_text = text[m.start():m.start()+200].strip()
-                    caption_only_pages.setdefault(num, []).append((i + 1, caption_text[:180]))
+            if 1 <= num <= 150 and num not in figure_pages:
+                caption_text = text[m.start():m.start()+200].strip()
+                caption_only_pages.setdefault(num, []).append((i + 1, caption_text[:180]))
 
-    # For fallback: prefer pages near a graphic page
     for num, occurrences in caption_only_pages.items():
         if num in figure_pages:
             continue
-        # Pick occurrence closest to a graphic page
-        best = None
-        best_dist = 999
-        for (pg, cap) in occurrences:
-            dist = min((abs(pg - gp) for gp in graphic_pages), default=999)
-            if dist < best_dist:
-                best_dist = dist
-                best = (pg, cap)
-        if best:
-            figure_pages[num] = best
+        best = min(occurrences, key=lambda x: min((abs(x[0] - gp) for gp in graphic_pages), default=999))
+        figure_pages[num] = best
 
     print(f"   Found {len(figure_pages)} figures | {len(graphic_pages)} graphic pages")
 
-    # Render and save
+    # Render and save (with cropping)
     entries = []
     for num in sorted(figure_pages.keys()):
         page_1indexed, caption = figure_pages[num]
@@ -146,13 +187,19 @@ def process_pdf(pdf_path, guideline_name):
         rel_path = os.path.relpath(out_path, BASE_DIR)
 
         page = doc[page_1indexed - 1]
+        crop = get_figure_crop(page, num)
         mat = fitz.Matrix(DPI / 72, DPI / 72)
-        pix = page.get_pixmap(matrix=mat, alpha=False)
+
+        if crop:
+            pix = page.get_pixmap(matrix=mat, clip=crop, alpha=False)
+            cropped = "✂"
+        else:
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            cropped = "🖼"
+
         pix.save(out_path)
         kb = os.path.getsize(out_path) / 1024
-
-        gfx_marker = "🖼" if page_1indexed in graphic_pages else "📝"
-        print(f"   {gfx_marker} Fig {num:3d} p{page_1indexed:3d} → {kb:.0f}KB")
+        print(f"   {cropped} Fig {num:3d} p{page_1indexed:3d} → {kb:.0f}KB")
 
         entries.append({
             "guideline": guideline_name,
