@@ -82,48 +82,49 @@ def find_figure_captions_fallback(page):
 def get_figure_crop(page, fig_num):
     """
     Crop to just the figure + caption area.
-    - Find caption 'Figure X' text block → gives bottom boundary
-    - Find topmost image/drawing above the caption → gives top boundary
-    Returns None to render full page if crop cannot be determined.
+    Finds ALL 'Figure X' text blocks on the page, then picks the one that
+    has the most graphic content (images + drawings) directly above it —
+    this is the actual figure caption, not a body-text reference.
     """
-    page_rect = page.rect
-    pw, ph = page_rect.width, page_rect.height
+    pw, ph = page.rect.width, page.rect.height
 
-    # Find caption block
-    caption_y0 = caption_y1 = None
+    # Collect all "Figure X" text block positions
+    all_captions = []
     for block in page.get_text("blocks"):
         x0, y0, x1, y1, text, *_ = block
         if re.match(rf'^(?:Figure|Fig\.?)\s+{fig_num}\b', text.strip(), re.IGNORECASE):
-            caption_y0, caption_y1 = y0, y1
-            break
+            all_captions.append((y0, y1))
 
-    if caption_y0 is None:
+    if not all_captions:
         return None
 
-    graphic_top = caption_y0  # fallback: start at caption
-
-    # Use get_image_info() — reliable dict-based API with 'bbox' key
+    # Collect all graphic content (images + drawings)
+    graphic_rects = []
     for info in page.get_image_info():
-        bbox = fitz.Rect(info['bbox'])
-        if bbox.y1 <= caption_y0 + 20 and bbox.height > 10 and bbox.width > 10:
-            graphic_top = min(graphic_top, bbox.y0)
+        r = fitz.Rect(info['bbox'])
+        if r.height > 10 and r.width > 10:
+            graphic_rects.append(r)
+    for d in page.get_drawings():
+        r = d.get("rect")
+        if r and r.height > 5 and r.width > 30:
+            graphic_rects.append(r)
 
-    # If no images found, look for substantial vector drawing clusters
-    if graphic_top >= caption_y0 - 20:
-        for drawing in page.get_drawings():
-            r = drawing.get("rect")
-            if not r:
-                continue
-            # Skip thin decorative lines and full-width dividers
-            if r.height < 5 or r.width < 30:
-                continue
-            if r.y1 <= caption_y0 + 20:
-                graphic_top = min(graphic_top, r.y0)
+    # For each caption candidate, find graphics above it and score by total area
+    best_caption_y0 = best_caption_y1 = None
+    best_graphic_top = None
+    best_score = -1
 
-    top = max(0, graphic_top - 12)
-    bottom = min(ph, caption_y1 + 15)
+    for (cap_y0, cap_y1) in all_captions:
+        above = [r for r in graphic_rects if r.y1 <= cap_y0 + 20]
+        score = sum(r.width * r.height for r in above)
+        if score > best_score:
+            best_score = score
+            best_caption_y0, best_caption_y1 = cap_y0, cap_y1
+            best_graphic_top = min((r.y0 for r in above), default=cap_y0)
 
-    # Need at least 12% of page height to be a useful crop
+    top = max(0, best_graphic_top - 12)
+    bottom = min(ph, best_caption_y1 + 15)
+
     if (bottom - top) < ph * 0.12:
         return None
 
