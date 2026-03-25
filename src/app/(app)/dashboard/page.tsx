@@ -132,6 +132,31 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* Random study */}
+      <div>
+        <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+          Surprise Me
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            href="/api/random/figure"
+            className="card p-4 flex flex-col gap-1 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+          >
+            <span className="text-2xl">🖼️</span>
+            <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Random Figure</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Jump to any figure</p>
+          </Link>
+          <Link
+            href="/api/random/recommendation"
+            className="card p-4 flex flex-col gap-1 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+          >
+            <span className="text-2xl">📋</span>
+            <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Random Rec</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Jump to any recommendation</p>
+          </Link>
+        </div>
+      </div>
+
       {/* Quick start */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">

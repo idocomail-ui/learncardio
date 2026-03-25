@@ -21,12 +21,13 @@ interface Props {
   guideline: { id: string; name: string; slug: string };
   recommendations: Recommendation[];
   initialProgress: Record<string, string>;
+  initialIndex?: number;
 }
 
 type FilterClass = "all" | "I" | "IIa" | "IIb" | "III";
 
-export default function RecommendationBrowser({ guideline, recommendations, initialProgress }: Props) {
-  const [current, setCurrent] = useState(0);
+export default function RecommendationBrowser({ guideline, recommendations, initialProgress, initialIndex = 0 }: Props) {
+  const [current, setCurrent] = useState(initialIndex);
   const [progress, setProgress] = useState<Record<string, string>>(initialProgress);
   const [expanded, setExpanded] = useState<"rephrased" | "explanation" | "vignette" | null>(null);
   const [filterClass, setFilterClass] = useState<FilterClass>("all");

@@ -40,18 +40,26 @@ async function getFigures(slug: string) {
 
 export default async function FiguresPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ start?: string }>;
 }) {
   const { slug } = await params;
+  const { start } = await searchParams;
   const data = await getFigures(slug);
   if (!data) notFound();
+
+  const startIndex = start
+    ? Math.max(0, data.figures.findIndex((f) => f.figure_number === Number(start)))
+    : 0;
 
   return (
     <FigureBrowser
       guideline={data.guideline}
       figures={data.figures}
       initialProgress={data.progressMap}
+      initialIndex={startIndex}
     />
   );
 }

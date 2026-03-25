@@ -20,10 +20,11 @@ interface Props {
   guideline: { id: string; name: string; slug: string };
   figures: Figure[];
   initialProgress: Record<string, string>;
+  initialIndex?: number;
 }
 
-export default function FigureBrowser({ guideline, figures, initialProgress }: Props) {
-  const [current, setCurrent] = useState(0);
+export default function FigureBrowser({ guideline, figures, initialProgress, initialIndex = 0 }: Props) {
+  const [current, setCurrent] = useState(initialIndex);
   const [progress, setProgress] = useState<Record<string, string>>(initialProgress);
 
   const figure = figures[current];

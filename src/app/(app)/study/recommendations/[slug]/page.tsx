@@ -38,18 +38,26 @@ async function getData(slug: string) {
 
 export default async function RecommendationsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ start?: string }>;
 }) {
   const { slug } = await params;
+  const { start } = await searchParams;
   const data = await getData(slug);
   if (!data) notFound();
+
+  const startIndex = start
+    ? Math.max(0, data.recommendations.findIndex((r) => r.recommendation_number === Number(start)))
+    : 0;
 
   return (
     <RecommendationBrowser
       guideline={data.guideline}
       recommendations={data.recommendations}
       initialProgress={data.progressMap}
+      initialIndex={startIndex}
     />
   );
 }
