@@ -6,6 +6,7 @@ import { type User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import ProgressSidebar from "@/components/ProgressSidebar";
 
 const NAV = [
   {
@@ -103,8 +104,11 @@ export default function AppShell({
         </button>
       </header>
 
-      {/* Main content */}
-      <main className="flex-1 pb-20 md:pb-0">{children}</main>
+      {/* Body: sidebar + main */}
+      <div className="flex flex-1">
+        <ProgressSidebar />
+        <main className="flex-1 pb-20 md:pb-0 min-w-0">{children}</main>
+      </div>
 
       {/* Bottom nav (mobile) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t bg-white dark:bg-slate-900 z-20 flex">

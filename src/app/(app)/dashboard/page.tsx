@@ -1,54 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 
-async function getStats(userId: string) {
-  const supabase = await createClient();
-
-  const [{ count: totalFigures }, { count: totalRecs }, { count: totalQuestions }] =
-    await Promise.all([
-      supabase.from("figures").select("*", { count: "exact", head: true }),
-      supabase.from("recommendations").select("*", { count: "exact", head: true }),
-      supabase.from("questions").select("*", { count: "exact", head: true }),
-    ]);
-
-  const { count: seenFigures } = await supabase
-    .from("user_progress")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("item_type", "figure")
-    .neq("status", "unseen");
-
-  const { count: answeredQuestions } = await supabase
-    .from("user_progress")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("item_type", "question");
-
-  const { count: dueReviews } = await supabase
-    .from("user_progress")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .lte("next_review_at", new Date().toISOString())
-    .neq("status", "unseen");
-
-  const { data: recentSessions } = await supabase
-    .from("sessions")
-    .select("*")
-    .eq("user_id", userId)
-    .order("started_at", { ascending: false })
-    .limit(3);
-
-  return {
-    totalFigures: totalFigures ?? 0,
-    totalRecs: totalRecs ?? 0,
-    totalQuestions: totalQuestions ?? 0,
-    seenFigures: seenFigures ?? 0,
-    answeredQuestions: answeredQuestions ?? 0,
-    dueReviews: dueReviews ?? 0,
-    recentSessions: recentSessions ?? [],
-  };
-}
-
 const MODE_LABELS: Record<string, string> = {
   browse_figures: "Browse Figures",
   browse_recommendations: "Browse Recommendations",
@@ -57,26 +9,28 @@ const MODE_LABELS: Record<string, string> = {
   mcq_figures: "Figures MCQ",
 };
 
+async function getRecentSessions(userId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .order("started_at", { ascending: false })
+    .limit(3);
+  return data ?? [];
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const stats = await getStats(user.id);
+  const recentSessions = await getRecentSessions(user.id);
 
   const quickStart = [
     { href: "/guidelines", label: "Start Studying", description: "Choose a guideline", primary: true },
     { href: "/study/mcq?mode=mcq_vignette", label: "Quick MCQ", description: "10 random vignettes", primary: false },
   ];
-
-  if (stats.dueReviews > 0) {
-    quickStart.unshift({
-      href: "/study/mcq?mode=review",
-      label: `${stats.dueReviews} Due Reviews`,
-      description: "Spaced repetition queue",
-      primary: true,
-    });
-  }
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -86,50 +40,6 @@ export default async function DashboardPage() {
         <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">
           {user.user_metadata?.name ?? user.email}
         </p>
-      </div>
-
-      {/* Due reviews alert */}
-      {stats.dueReviews > 0 && (
-        <Link
-          href="/study/mcq?mode=review"
-          className="block card p-4 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-blue-800 dark:text-blue-300">
-                {stats.dueReviews} reviews due
-              </p>
-              <p className="text-sm text-blue-600 dark:text-blue-400">
-                Tap to start spaced repetition session
-              </p>
-            </div>
-            <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
-        </Link>
-      )}
-
-      {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="card p-4 text-center">
-          <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {stats.seenFigures}
-            <span className="text-sm font-normal text-slate-400">/{stats.totalFigures}</span>
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Figures seen</p>
-        </div>
-        <div className="card p-4 text-center">
-          <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {stats.answeredQuestions}
-            <span className="text-sm font-normal text-slate-400">/{stats.totalQuestions}</span>
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Questions done</p>
-        </div>
-        <div className="card p-4 text-center">
-          <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">25</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Guidelines</p>
-        </div>
       </div>
 
       {/* Random study */}
@@ -192,13 +102,13 @@ export default async function DashboardPage() {
       </div>
 
       {/* Recent sessions */}
-      {stats.recentSessions.length > 0 && (
+      {recentSessions.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
             Recent Sessions
           </h2>
           <div className="space-y-2">
-            {stats.recentSessions.map((session: {
+            {recentSessions.map((session: {
               id: string;
               mode: string;
               questions_answered: number;
