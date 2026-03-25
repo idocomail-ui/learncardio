@@ -56,7 +56,8 @@ async function uploadFigureImage(
   }
 
   const { data } = supabase.storage.from("figures").getPublicUrl(storagePath);
-  return data.publicUrl;
+  // Append cache-busting version so browsers/CDN don't serve stale images after re-upload
+  return `${data.publicUrl}?v=${Date.now()}`;
 }
 
 async function main() {

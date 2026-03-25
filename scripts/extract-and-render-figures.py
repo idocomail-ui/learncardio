@@ -59,6 +59,9 @@ def find_figure_captions(page):
         if m:
             num = int(m.group(1))
             if 1 <= num <= 150:
+                # Skip TOC entries — they contain dot sequences like "Figure 1 ........ 42"
+                if re.search(r'\.{4,}', text):
+                    continue
                 found.add(num)
     return found
 
@@ -166,6 +169,9 @@ def process_pdf(pdf_path, guideline_name):
             num = int(m.group(1))
             if 1 <= num <= 150 and num not in figure_pages:
                 caption_text = text[m.start():m.start()+200].strip()
+                # Skip TOC entries (dot sequences like "Figure 1 ........ 42")
+                if re.search(r'\.{4,}', caption_text):
+                    continue
                 caption_only_pages.setdefault(num, []).append((i + 1, caption_text[:180]))
 
     for num, occurrences in caption_only_pages.items():

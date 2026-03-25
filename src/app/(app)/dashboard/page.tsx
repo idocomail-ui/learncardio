@@ -137,24 +137,21 @@ export default async function DashboardPage() {
         <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
           Surprise Me
         </h2>
-        <div className="grid grid-cols-2 gap-3">
-          <Link
-            href="/api/random/figure"
-            className="card p-4 flex flex-col gap-1 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
-          >
-            <span className="text-2xl">🖼️</span>
-            <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Random Figure</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Jump to any figure</p>
-          </Link>
-          <Link
-            href="/api/random/recommendation"
-            className="card p-4 flex flex-col gap-1 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
-          >
-            <span className="text-2xl">📋</span>
-            <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Random Rec</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Jump to any recommendation</p>
-          </Link>
-        </div>
+        <Link
+          href="/study/random"
+          className="card p-4 flex items-center justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🎲</span>
+            <div>
+              <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Random Study</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Figures or recommendations — keep hitting Next</p>
+            </div>
+          </div>
+          <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </Link>
       </div>
 
       {/* Quick start */}

@@ -45,7 +45,7 @@ async function callGroq(groq: Groq, prompt: string): Promise<string> {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const completion = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+        model: "llama-3.1-8b-instant",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3,
         max_tokens: 1024,
@@ -76,22 +76,32 @@ function parseQuestion(response: string, defaults: Partial<Question>): Question 
 // Mode 3: Clinical Vignette
 async function generateVignetteQuestion(rec: EnrichedRecommendation, difficulty: Difficulty, groq: Groq): Promise<Question | null> {
   const diffGuide = {
-    easy: "straightforward with a classic presentation.",
-    intermediate: "moderately complex with comorbidities.",
-    hard: "challenging with subtle distinctions or contraindications.",
+    easy: "Use a classic, textbook presentation. The correct answer should be clear to a well-prepared resident. Distractors are plausible but clearly less appropriate.",
+    intermediate: "Add one or two comorbidities or conflicting findings that require prioritisation. Distractors should represent common errors in clinical reasoning.",
+    hard: "Present an atypical or ambiguous scenario, a contraindication to the obvious choice, or a situation requiring knowledge of specific thresholds/timings. At least two options should seem reasonable to a non-expert.",
   };
 
-  const prompt = `Create a clinical vignette MCQ for a cardiology resident based on this ESC ${rec.guideline} recommendation:
-"${rec.text}" (Class ${rec.class}, LOE ${rec.loe})
+  const prompt = `You are writing a high-quality cardiology board-style MCQ for a cardiology resident preparing for European board exams.
 
-Difficulty: ${difficulty} — ${diffGuide[difficulty]}
+Base the question on this ESC ${rec.guideline} recommendation:
+"${rec.text}"
 
-Return ONLY a JSON object:
+Difficulty: ${difficulty}
+Instructions: ${diffGuide[difficulty]}
+
+Rules:
+- Write a realistic 3-5 sentence clinical vignette (age, sex, presenting complaint, relevant history, key examination/investigation findings).
+- End with a clear clinical question: "What is the most appropriate next step?" or "Which management is most appropriate?" — NOT "Which recommendation applies?"
+- Write 4 answer options as short clinical actions (e.g. "Start IV heparin and proceed to urgent PCI"), NOT raw guideline text.
+- Only one option is correct. The other three must be plausible but wrong for specific, teachable reasons.
+- The explanation must: (1) state WHY the correct answer is right using clinical reasoning, (2) briefly explain why each distractor is wrong, (3) NOT mention Class or Level of Evidence.
+
+Return ONLY valid JSON (no markdown, no extra text):
 {
-  "stem": "2-4 sentence clinical vignette + 1 question sentence",
+  "stem": "...",
   "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "correctOption": "A",
-  "explanation": "3-5 sentences referencing the ESC guideline Class ${rec.class}, LOE ${rec.loe}."
+  "explanation": "..."
 }`;
 
   try {
@@ -152,7 +162,7 @@ function generateRecIdentifyQuestion(rec: EnrichedRecommendation, otherRecs: Enr
     id: generateId(), type: "rec_identify", difficulty,
     guideline: rec.guideline, guidelineSlug: rec.guidelineSlug,
     sourceRecommendationNumber: rec.recommendationNumber,
-    stem: `${rec.miniVignette || `A patient requires guidance per ESC ${rec.guideline}.`}\n\nWhich recommendation (Class ${rec.class}, LOE ${rec.loe}) applies?`,
+    stem: `${rec.miniVignette || `A patient requires guidance per ESC ${rec.guideline}.`}\n\nWhich of the following is the correct ESC recommendation?`,
     options: { A: allOptions[0], B: allOptions[1], C: allOptions[2], D: allOptions[3] },
     correctOption: correctLetter,
     explanation: `Correct: "${rec.text}" (Class ${rec.class}, LOE ${rec.loe}). ${rec.explanation}`,
@@ -218,31 +228,20 @@ async function main() {
     const sameGuidelineRecs = recs.filter((r) => r.guidelineSlug === rec.guidelineSlug);
 
     for (const difficulty of difficulties) {
-      // Class + LOE + identify — no API calls needed
-      const classKey = `rec_class-${rec.guideline}-${rec.recommendationNumber}-${difficulty}`;
-      if (!existingKeys.has(classKey)) {
-        const q = generateRecClassQuestion(rec, difficulty);
-        allQuestions.push(q); existingKeys.add(classKey);
-      }
-
-      const loeKey = `rec_loe-${rec.guideline}-${rec.recommendationNumber}-${difficulty}`;
-      if (!existingKeys.has(loeKey)) {
-        const q = generateRecLOEQuestion(rec, difficulty);
-        allQuestions.push(q); existingKeys.add(loeKey);
-      }
-
       const identifyKey = `rec_identify-${rec.guideline}-${rec.recommendationNumber}-${difficulty}`;
       if (!existingKeys.has(identifyKey)) {
         const q = generateRecIdentifyQuestion(rec, sameGuidelineRecs, difficulty);
         if (q) { allQuestions.push(q); existingKeys.add(identifyKey); }
       }
 
-      // Vignette — needs API call
-      const vignetteKey = `vignette-${rec.guideline}-${rec.recommendationNumber}-${difficulty}`;
-      if (!existingKeys.has(vignetteKey)) {
-        const q = await generateVignetteQuestion(rec, difficulty, groq);
-        if (q) { allQuestions.push(q); existingKeys.add(vignetteKey); }
-        await sleep(RATE_LIMIT_DELAY_MS);
+      // Vignette — needs API call (skip if SKIP_AI_QUESTIONS env var set)
+      if (!process.env.SKIP_AI_QUESTIONS) {
+        const vignetteKey = `vignette-${rec.guideline}-${rec.recommendationNumber}-${difficulty}`;
+        if (!existingKeys.has(vignetteKey)) {
+          const q = await generateVignetteQuestion(rec, difficulty, groq);
+          if (q) { allQuestions.push(q); existingKeys.add(vignetteKey); }
+          await sleep(RATE_LIMIT_DELAY_MS);
+        }
       }
     }
 
@@ -251,17 +250,19 @@ async function main() {
   }
 
   // Figure questions
-  console.log(`\nGenerating figure questions...`);
-  for (const fig of figs) {
-    for (const difficulty of difficulties) {
-      const figKey = `fig_identify-${fig.guideline}-${fig.figureNumber}-${difficulty}`;
-      if (!existingKeys.has(figKey)) {
-        const q = await generateFigureQuestion(fig, difficulty, groq);
-        if (q) { allQuestions.push(q); existingKeys.add(figKey); }
-        await sleep(RATE_LIMIT_DELAY_MS);
+  if (!process.env.SKIP_AI_QUESTIONS) {
+    console.log(`\nGenerating figure questions...`);
+    for (const fig of figs) {
+      for (const difficulty of difficulties) {
+        const figKey = `fig_identify-${fig.guideline}-${fig.figureNumber}-${difficulty}`;
+        if (!existingKeys.has(figKey)) {
+          const q = await generateFigureQuestion(fig, difficulty, groq);
+          if (q) { allQuestions.push(q); existingKeys.add(figKey); }
+          await sleep(RATE_LIMIT_DELAY_MS);
+        }
       }
+      fs.writeFileSync(outputPath, JSON.stringify(allQuestions, null, 2));
     }
-    fs.writeFileSync(outputPath, JSON.stringify(allQuestions, null, 2));
   }
 
   console.log(`\n✅ Done! Total questions: ${allQuestions.length}`);

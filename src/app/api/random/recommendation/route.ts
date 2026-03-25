@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const supabase = await createClient();
 
   const { count } = await supabase
@@ -14,15 +14,11 @@ export async function GET(request: NextRequest) {
 
   const { data } = await supabase
     .from("recommendations")
-    .select("recommendation_number, guidelines(slug)")
+    .select("id, recommendation_number, class, loe, original_text, rephrased_text, explanation, mini_vignette, guidelines(id, name, slug)")
     .range(randomOffset, randomOffset)
     .single();
 
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const guidelines = data.guidelines as unknown as { slug: string };
-  const slug = guidelines.slug;
-  return NextResponse.redirect(
-    new URL(`/study/recommendations/${slug}?start=${data.recommendation_number}`, request.url)
-  );
+  return NextResponse.json(data);
 }
