@@ -119,13 +119,6 @@ export default function FigureBrowser({ guideline, figures, initialProgress, ini
           </div>
         )}
 
-        {/* AI Explanation */}
-        {figure.caption_explanation && (
-          <div className="px-4 py-4 border-t">
-            <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">AI Explanation</p>
-            <p className="text-sm text-slate-700 leading-relaxed">{figure.caption_explanation}</p>
-          </div>
-        )}
       </div>
 
       {/* Actions */}

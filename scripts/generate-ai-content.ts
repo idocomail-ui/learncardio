@@ -12,7 +12,7 @@ import type { RecommendationEntry } from "./extract-recommendations";
 
 const PIPELINE_DIR = path.join(process.cwd(), "data/pipeline");
 const GROQ_DELAY_MS = 2500;
-const GEMINI_DELAY_MS = 4000; // gemini-2.5-flash-lite free tier ~15 RPM
+const OLLAMA_BASE = "http://localhost:11434";
 
 export interface EnrichedFigure {
   guideline: string;
@@ -34,50 +34,35 @@ async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function enrichFigureWithVision(
-  figure: EnrichedFigure,
-  geminiApiKey: string
-): Promise<string> {
+async function enrichFigureWithVision(figure: EnrichedFigure): Promise<string> {
   const imgPath = path.join(process.cwd(), figure.imagePath);
   if (!fs.existsSync(imgPath)) return "";
 
   const imgB64 = fs.readFileSync(imgPath).toString("base64");
 
-  const prompt = `Figure ${figure.figureNumber} from the ESC ${figure.guideline} guideline.
-Caption: "${figure.caption}"
-
-Describe what this figure shows to a cardiology resident in 3-5 sentences. Be specific about the actual content visible in the figure — the steps, pathways, values, or decisions shown. Do not start with any preamble.`;
-
-  const payload = {
-    contents: [
-      {
-        parts: [
-          { inline_data: { mime_type: "image/png", data: imgB64 } },
-          { text: prompt },
-        ],
-      },
-    ],
-    generationConfig: { maxOutputTokens: 400, temperature: 0.2 },
-  };
+  const prompt = `This is Figure ${figure.figureNumber} from the ESC ${figure.guideline} guideline (caption: "${figure.caption}"). What are the main steps or categories shown in this figure? Answer in one short paragraph, max 60 words.`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiApiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }
-    );
+    const res = await fetch(`${OLLAMA_BASE}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "llava:7b", prompt, images: [imgB64], stream: false, options: { num_predict: 100, temperature: 0.1 } }),
+      signal: AbortSignal.timeout(120_000),
+    });
     if (!res.ok) {
-      const err = await res.text();
-      console.warn(`    Gemini error ${res.status}: ${err.slice(0, 200)}`);
+      console.warn(`    LLaVA error ${res.status}`);
       return "";
     }
     const data = await res.json();
-    return (data.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+    let text = (data.response ?? "").trim();
+    // Strip generic opener
+    text = text.replace(/^The image (is|shows|displays|presents|depicts)[^.]*\.\s*/i, "");
+    // Truncate at last complete sentence
+    const lastPeriod = text.lastIndexOf(".");
+    if (lastPeriod > 0) text = text.slice(0, lastPeriod + 1);
+    return text.trim();
   } catch (e) {
-    console.warn("    Gemini request failed:", e);
+    console.warn("    LLaVA request failed:", e);
     return "";
   }
 }
@@ -120,18 +105,16 @@ Return ONLY the JSON object. No preamble.`;
 }
 
 async function main() {
+  const mode = process.argv[2] ?? "all"; // "figures" | "recs" | "all"
   const groqKey = process.env.GROQ_API_KEY;
   if (!groqKey) throw new Error("GROQ_API_KEY not set in .env.local");
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) throw new Error("GEMINI_API_KEY not set in .env.local");
-
   const groq = new Groq({ apiKey: groqKey });
 
   // --- Enrich Figures (vision) ---
   const figuresPath = path.join(PIPELINE_DIR, "figures.json");
   const enrichedFiguresPath = path.join(PIPELINE_DIR, "figures-enriched.json");
 
-  if (fs.existsSync(figuresPath)) {
+  if (mode !== "recs" && fs.existsSync(figuresPath)) {
     const figures: EnrichedFigure[] = JSON.parse(fs.readFileSync(figuresPath, "utf-8"));
     const enriched: EnrichedFigure[] = fs.existsSync(enrichedFiguresPath)
       ? JSON.parse(fs.readFileSync(enrichedFiguresPath, "utf-8"))
@@ -150,10 +133,9 @@ async function main() {
     for (let i = 0; i < toEnrich.length; i++) {
       const fig = toEnrich[i];
       console.log(`  [${i + 1}/${toEnrich.length}] ${fig.guideline} - Figure ${fig.figureNumber}`);
-      const explanation = await enrichFigureWithVision(fig, geminiKey);
+      const explanation = await enrichFigureWithVision(fig);
       enrichedWithExp.push({ ...fig, explanation });
       fs.writeFileSync(enrichedFiguresPath, JSON.stringify(enrichedWithExp, null, 2));
-      await sleep(GEMINI_DELAY_MS);
     }
     console.log(`✅ Figures enriched: ${enrichedWithExp.length}`);
   }
@@ -162,7 +144,7 @@ async function main() {
   const recsPath = path.join(PIPELINE_DIR, "recommendations.json");
   const enrichedRecsPath = path.join(PIPELINE_DIR, "recommendations-enriched.json");
 
-  if (fs.existsSync(recsPath)) {
+  if (mode !== "figures" && fs.existsSync(recsPath)) {
     const recs: RecommendationEntry[] = JSON.parse(fs.readFileSync(recsPath, "utf-8"));
     const enriched: EnrichedRecommendation[] = fs.existsSync(enrichedRecsPath)
       ? JSON.parse(fs.readFileSync(enrichedRecsPath, "utf-8"))

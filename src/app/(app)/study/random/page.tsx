@@ -154,12 +154,6 @@ export default function RandomStudyPage() {
               />
             </div>
           )}
-          {figure.caption_explanation && (
-            <div className="px-4 py-4 border-t">
-              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">AI Explanation</p>
-              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{figure.caption_explanation}</p>
-            </div>
-          )}
         </div>
       ) : mode === "recommendation" && rec ? (
         <div className="card overflow-hidden">

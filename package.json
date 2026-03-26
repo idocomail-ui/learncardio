@@ -10,6 +10,8 @@
     "pipeline:figures": "npx tsx scripts/extract-figures.ts",
     "pipeline:recommendations": "npx tsx scripts/extract-recommendations.ts",
     "pipeline:ai-content": "npx tsx scripts/generate-ai-content.ts",
+    "pipeline:ai-figures": "npx tsx scripts/generate-ai-content.ts figures",
+    "pipeline:ai-recs": "npx tsx scripts/generate-ai-content.ts recs",
     "pipeline:questions": "npx tsx scripts/generate-questions.ts",
     "pipeline:seed": "npx tsx scripts/seed-database.ts",
     "pipeline:all": "npm run pipeline:figures && npm run pipeline:recommendations && npm run pipeline:ai-content && npm run pipeline:questions && npm run pipeline:seed"
