@@ -27,9 +27,7 @@ export default function DashboardPage() {
           className="card flex items-center gap-4 p-5 hover:border-violet-400 dark:hover:border-violet-500 transition-colors group"
         >
           <div className="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-950 flex items-center justify-center shrink-0 group-hover:bg-violet-100 dark:group-hover:bg-violet-900 transition-colors">
-            <svg className="w-5 h-5 text-violet-600 dark:text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+            <span className="text-xl leading-none">🎲</span>
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-800 dark:text-slate-200">Random Study</p>
