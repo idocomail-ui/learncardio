@@ -59,7 +59,11 @@ export default function ProgressSidebar() {
     });
   }, []);
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => {
+    fetchStats();
+    window.addEventListener("progress-updated", fetchStats);
+    return () => window.removeEventListener("progress-updated", fetchStats);
+  }, [fetchStats]);
 
   async function resetProgress() {
     if (!confirm("Reset all progress? This cannot be undone.")) return;

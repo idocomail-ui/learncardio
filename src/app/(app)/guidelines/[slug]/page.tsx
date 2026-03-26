@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import GuidelineStudyMenu from "@/components/GuidelineStudyMenu";
+import GuidelineProgress from "@/components/GuidelineProgress";
 
 async function getGuideline(slug: string) {
   const supabase = await createClient();
@@ -44,6 +45,7 @@ export default async function GuidelinePage({
           <span className="text-slate-300 dark:text-slate-600">·</span>
           <span className="text-sm text-slate-400">{recCount} recommendations</span>
         </div>
+        <GuidelineProgress guidelineId={guideline.id} figureCount={figureCount} recCount={recCount} />
       </div>
 
       <GuidelineStudyMenu
