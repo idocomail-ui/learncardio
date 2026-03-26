@@ -22,6 +22,15 @@ export function classBadgeVariant(cls: string) {
   }
 }
 
+export function loeBadgeVariant(loe: string) {
+  switch (loe?.toUpperCase()) {
+    case "A": return "badge-loe-a";
+    case "B": return "badge-loe-b";
+    case "C": return "badge-loe-c";
+    default:  return "badge-loe";
+  }
+}
+
 /** SM-2 spaced repetition algorithm */
 export function sm2(
   quality: 0 | 1 | 2 | 3 | 4 | 5, // 0-2 = fail, 3-5 = pass

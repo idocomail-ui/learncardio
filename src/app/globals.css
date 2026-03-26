@@ -4,11 +4,16 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* ESC guideline class colors */
-  --color-class-i:   #16a34a;
-  --color-class-iia: #0d9488;
-  --color-class-iib: #d97706;
-  --color-class-iii: #dc2626;
+  /* ESC official class colors */
+  --color-class-i:   #00843D;
+  --color-class-iia: #84BD00;
+  --color-class-iib: #FFD100;
+  --color-class-iii: #C8102E;
+
+  /* ESC official LOE colors */
+  --color-loe-a: #003865;
+  --color-loe-b: #0072CE;
+  --color-loe-c: #6CACE4;
 
   /* Brand */
   --color-brand-50:  #eff6ff;
@@ -35,12 +40,17 @@
 }
 
 @layer components {
-  /* ESC Class badges */
-  .badge-class-i   { background-color: #dcfce7; color: #166534; }
-  .badge-class-iia { background-color: #ccfbf1; color: #115e59; }
-  .badge-class-iib { background-color: #fef3c7; color: #92400e; }
-  .badge-class-iii { background-color: #fee2e2; color: #991b1b; }
-  .badge-loe       { background-color: #dbeafe; color: #1e40af; }
+  /* ESC Class of Recommendation badges */
+  .badge-class-i   { background-color: #00843D; color: #fff; }
+  .badge-class-iia { background-color: #84BD00; color: #fff; }
+  .badge-class-iib { background-color: #FFD100; color: #1a1a1a; }
+  .badge-class-iii { background-color: #C8102E; color: #fff; }
+
+  /* ESC Level of Evidence badges */
+  .badge-loe-a { background-color: #003865; color: #fff; }
+  .badge-loe-b { background-color: #0072CE; color: #fff; }
+  .badge-loe-c { background-color: #6CACE4; color: #fff; }
+  .badge-loe   { background-color: #003865; color: #fff; }
 
   /* Card */
   .card {

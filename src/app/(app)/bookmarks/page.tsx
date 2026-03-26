@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import { classBadgeVariant, cn } from "@/lib/utils";
+import { classBadgeVariant, loeBadgeVariant, cn } from "@/lib/utils";
 
 async function getBookmarks(userId: string) {
   const supabase = await createClient();
@@ -90,7 +90,7 @@ export default async function BookmarksPage() {
                           <span className={cn("text-xs px-1.5 py-0.5 rounded font-medium", classBadgeVariant(detail.class as string))}>
                             Class {detail.class as string}
                           </span>
-                          <span className="badge-loe text-xs px-1.5 py-0.5 rounded font-medium">
+                          <span className={cn("text-xs px-1.5 py-0.5 rounded font-medium", loeBadgeVariant(detail.loe as string))}>
                             LOE {detail.loe as string}
                           </span>
                         </div>

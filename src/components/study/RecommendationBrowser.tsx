@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { cn, classBadgeVariant } from "@/lib/utils";
+import { cn, classBadgeVariant, loeBadgeVariant } from "@/lib/utils";
 import BookmarkButton from "@/components/BookmarkButton";
 
 interface Recommendation {
@@ -121,7 +121,7 @@ export default function RecommendationBrowser({ guideline, recommendations, init
               <span className={cn("text-xs px-2.5 py-1 rounded-full font-semibold", classBadgeVariant(rec.class))}>
                 Class {rec.class}
               </span>
-              <span className="badge-loe text-xs px-2.5 py-1 rounded-full font-semibold">
+              <span className={cn("text-xs px-2.5 py-1 rounded-full font-semibold", loeBadgeVariant(rec.loe))}>
                 LOE {rec.loe}
               </span>
             </div>

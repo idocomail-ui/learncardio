@@ -1,5 +1,5 @@
 /**
- * Script 3: Enrich figures and recommendations with AI-generated content using Groq
+ * Script 3: Enrich figures (via Gemini vision) and recommendations (via Groq) with AI content
  * Run: npm run pipeline:ai-content
  */
 
@@ -11,7 +11,8 @@ import Groq from "groq-sdk";
 import type { RecommendationEntry } from "./extract-recommendations";
 
 const PIPELINE_DIR = path.join(process.cwd(), "data/pipeline");
-const RATE_LIMIT_DELAY_MS = 2500;
+const GROQ_DELAY_MS = 2500;
+const GEMINI_DELAY_MS = 4000; // gemini-2.5-flash-lite free tier ~15 RPM
 
 export interface EnrichedFigure {
   guideline: string;
@@ -33,28 +34,50 @@ async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function enrichFigure(figure: EnrichedFigure, groq: Groq): Promise<string> {
-  const prompt = `You are a cardiology education expert. Explain Figure ${figure.figureNumber} from the ESC ${figure.guideline} guideline.
+async function enrichFigureWithVision(
+  figure: EnrichedFigure,
+  geminiApiKey: string
+): Promise<string> {
+  const imgPath = path.join(process.cwd(), figure.imagePath);
+  if (!fs.existsSync(imgPath)) return "";
 
+  const imgB64 = fs.readFileSync(imgPath).toString("base64");
+
+  const prompt = `Figure ${figure.figureNumber} from the ESC ${figure.guideline} guideline.
 Caption: "${figure.caption}"
 
-Provide a clear explanation for a cardiology resident. Include:
-1. What the figure shows (algorithm, flowchart, risk score, etc.)
-2. How to interpret it step by step
-3. Key clinical decision points
-4. Clinical use
+Describe what this figure shows to a cardiology resident in 3-5 sentences. Be specific about the actual content visible in the figure — the steps, pathways, values, or decisions shown. Do not start with any preamble.`;
 
-Keep it under 250 words.`;
+  const payload = {
+    contents: [
+      {
+        parts: [
+          { inline_data: { mime_type: "image/png", data: imgB64 } },
+          { text: prompt },
+        ],
+      },
+    ],
+    generationConfig: { maxOutputTokens: 400, temperature: 0.2 },
+  };
 
   try {
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
-      max_tokens: 512,
-    });
-    return completion.choices[0]?.message?.content?.trim() ?? "";
-  } catch {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiApiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn(`    Gemini error ${res.status}: ${err.slice(0, 200)}`);
+      return "";
+    }
+    const data = await res.json();
+    return (data.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+  } catch (e) {
+    console.warn("    Gemini request failed:", e);
     return "";
   }
 }
@@ -63,19 +86,17 @@ async function enrichRecommendation(
   rec: RecommendationEntry,
   groq: Groq
 ): Promise<{ rephrasedText: string; explanation: string; miniVignette: string }> {
-  const prompt = `You are a cardiology education expert helping a resident study the ESC ${rec.guideline} guideline.
-
-Original recommendation (Class ${rec.class}, LOE ${rec.loe}):
+  const prompt = `ESC ${rec.guideline} guideline recommendation:
 "${rec.text}"
 
-Return a JSON object:
+Return a JSON object with these fields:
 {
   "rephrasedText": "Plain-English version (1-2 sentences)",
   "explanation": "Why this recommendation exists: clinical reasoning, mechanism, evidence. 3-5 sentences.",
   "miniVignette": "One sentence clinical scenario illustrating when this applies."
 }
 
-Return ONLY the JSON object.`;
+Return ONLY the JSON object. No preamble.`;
 
   try {
     const completion = await groq.chat.completions.create({
@@ -99,11 +120,14 @@ Return ONLY the JSON object.`;
 }
 
 async function main() {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error("GROQ_API_KEY not set in .env.local");
-  const groq = new Groq({ apiKey });
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) throw new Error("GROQ_API_KEY not set in .env.local");
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) throw new Error("GEMINI_API_KEY not set in .env.local");
 
-  // --- Enrich Figures ---
+  const groq = new Groq({ apiKey: groqKey });
+
+  // --- Enrich Figures (vision) ---
   const figuresPath = path.join(PIPELINE_DIR, "figures.json");
   const enrichedFiguresPath = path.join(PIPELINE_DIR, "figures-enriched.json");
 
@@ -113,22 +137,28 @@ async function main() {
       ? JSON.parse(fs.readFileSync(enrichedFiguresPath, "utf-8"))
       : [];
 
-    const enrichedKeys = new Set(enriched.map((f) => `${f.guideline}-${f.figureNumber}`));
+    // Re-enrich figures that have an empty explanation or were done without vision
+    const enrichedKeys = new Set(
+      enriched.filter((f) => f.explanation).map((f) => `${f.guideline}-${f.figureNumber}`)
+    );
     const toEnrich = figures.filter((f) => !enrichedKeys.has(`${f.guideline}-${f.figureNumber}`));
-    console.log(`Figures: ${enriched.length} done, ${toEnrich.length} remaining`);
+    console.log(`Figures: ${enriched.filter(f => f.explanation).length} done, ${toEnrich.length} remaining`);
+
+    // Remove entries without explanation so they get re-added
+    const enrichedWithExp = enriched.filter((f) => f.explanation);
 
     for (let i = 0; i < toEnrich.length; i++) {
       const fig = toEnrich[i];
       console.log(`  [${i + 1}/${toEnrich.length}] ${fig.guideline} - Figure ${fig.figureNumber}`);
-      const explanation = await enrichFigure(fig, groq);
-      enriched.push({ ...fig, explanation });
-      fs.writeFileSync(enrichedFiguresPath, JSON.stringify(enriched, null, 2));
-      await sleep(RATE_LIMIT_DELAY_MS);
+      const explanation = await enrichFigureWithVision(fig, geminiKey);
+      enrichedWithExp.push({ ...fig, explanation });
+      fs.writeFileSync(enrichedFiguresPath, JSON.stringify(enrichedWithExp, null, 2));
+      await sleep(GEMINI_DELAY_MS);
     }
-    console.log(`✅ Figures enriched: ${enriched.length}`);
+    console.log(`✅ Figures enriched: ${enrichedWithExp.length}`);
   }
 
-  // --- Enrich Recommendations ---
+  // --- Enrich Recommendations (text via Groq) ---
   const recsPath = path.join(PIPELINE_DIR, "recommendations.json");
   const enrichedRecsPath = path.join(PIPELINE_DIR, "recommendations-enriched.json");
 
@@ -148,7 +178,7 @@ async function main() {
       const ai = await enrichRecommendation(rec, groq);
       enriched.push({ ...rec, ...ai });
       fs.writeFileSync(enrichedRecsPath, JSON.stringify(enriched, null, 2));
-      await sleep(RATE_LIMIT_DELAY_MS);
+      await sleep(GROQ_DELAY_MS);
     }
     console.log(`✅ Recommendations enriched: ${enriched.length}`);
   }

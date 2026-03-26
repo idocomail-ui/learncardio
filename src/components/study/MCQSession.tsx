@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { cn, classBadgeVariant, sm2 } from "@/lib/utils";
+import { cn, classBadgeVariant, loeBadgeVariant, sm2 } from "@/lib/utils";
 import BookmarkButton from "@/components/BookmarkButton";
 
 interface Question {
@@ -186,7 +186,7 @@ export default function MCQSession({ questions, mode, userId }: Props) {
               <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", classBadgeVariant(question.recommendations.class))}>
                 Class {question.recommendations.class}
               </span>
-              <span className="badge-loe text-xs px-2 py-0.5 rounded-full font-medium">
+              <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", loeBadgeVariant(question.recommendations.loe))}>
                 LOE {question.recommendations.loe}
               </span>
             </>
