@@ -3,16 +3,20 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
-  const guidelineSlug = request.nextUrl.searchParams.get("guideline");
+  const slugsParam = request.nextUrl.searchParams.get("slugs");
+  const slugs = slugsParam ? slugsParam.split(",").filter(Boolean) : [];
 
-  let guidelineId: string | null = null;
-  if (guidelineSlug) {
-    const { data: gl } = await supabase.from("guidelines").select("id").eq("slug", guidelineSlug).single();
-    guidelineId = gl?.id ?? null;
+  let guidelineIds: string[] = [];
+  if (slugs.length > 0) {
+    const { data: gls } = await supabase
+      .from("guidelines")
+      .select("id")
+      .in("slug", slugs);
+    guidelineIds = (gls ?? []).map((g: { id: string }) => g.id);
   }
 
   let countQuery = supabase.from("recommendations").select("*", { count: "exact", head: true });
-  if (guidelineId) countQuery = countQuery.eq("guideline_id", guidelineId);
+  if (guidelineIds.length > 0) countQuery = countQuery.in("guideline_id", guidelineIds);
   const { count } = await countQuery;
   if (!count) return NextResponse.json({ error: "No recommendations" }, { status: 404 });
 
@@ -21,7 +25,7 @@ export async function GET(request: NextRequest) {
   let dataQuery = supabase
     .from("recommendations")
     .select("id, recommendation_number, class, loe, original_text, rephrased_text, explanation, mini_vignette, guidelines(id, name, slug)");
-  if (guidelineId) dataQuery = dataQuery.eq("guideline_id", guidelineId);
+  if (guidelineIds.length > 0) dataQuery = dataQuery.in("guideline_id", guidelineIds);
 
   const { data } = await dataQuery.range(randomOffset, randomOffset).single();
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });

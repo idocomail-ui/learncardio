@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cn, classBadgeVariant, loeBadgeVariant } from "@/lib/utils";
 
@@ -35,8 +36,13 @@ function isFigure(item: Item): item is RandomFigure {
   return "figure_number" in item;
 }
 
-export default function RandomStudyPage() {
-  const [mode, setMode] = useState<Mode>("figure");
+function RandomStudyInner() {
+  const searchParams = useSearchParams();
+  const paramMode = searchParams.get("mode") as Mode | null;
+  const paramSlugs = searchParams.get("slugs") ?? "";
+  const isSessionMode = !!(paramMode || paramSlugs);
+
+  const [mode, setMode] = useState<Mode>(paramMode ?? "figure");
   const [current, setCurrent] = useState<Item | null>(null);
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<Item[]>([]);
@@ -44,11 +50,16 @@ export default function RandomStudyPage() {
   const [progress, setProgress] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<"explanation" | null>(null);
 
+  const buildUrl = useCallback((m: Mode) => {
+    const base = `/api/random/${m === "figure" ? "figure" : "recommendation"}`;
+    return paramSlugs ? `${base}?slugs=${paramSlugs}` : base;
+  }, [paramSlugs]);
+
   const fetchRandom = useCallback(async (m: Mode) => {
     setLoading(true);
     setExpanded(null);
     try {
-      const res = await fetch(`/api/random/${m === "figure" ? "figure" : "recommendation"}`);
+      const res = await fetch(buildUrl(m));
       const data = await res.json();
       setCurrent(data);
       setHistory((h) => [...h.slice(0, historyIndex + 1), data]);
@@ -56,9 +67,9 @@ export default function RandomStudyPage() {
     } finally {
       setLoading(false);
     }
-  }, [historyIndex]);
+  }, [historyIndex, buildUrl]);
 
-  useEffect(() => { fetchRandom("figure"); }, []); // eslint-disable-line
+  useEffect(() => { fetchRandom(paramMode ?? "figure"); }, []); // eslint-disable-line
 
   function switchMode(m: Mode) {
     setMode(m);
@@ -121,30 +132,50 @@ export default function RandomStudyPage() {
     <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <Link href="/dashboard" className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 transition-colors">
+        <Link
+          href={isSessionMode ? "/study" : "/dashboard"}
+          className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+        >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          Dashboard
+          {isSessionMode ? "Session" : "Dashboard"}
         </Link>
         <span className="text-sm text-slate-400">{historyIndex + 1} seen</span>
       </div>
 
-      {/* Mode toggle */}
-      <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-        {(["figure", "recommendation"] as Mode[]).map((m) => (
-          <button
-            key={m}
-            onClick={() => mode !== m && switchMode(m)}
-            className={cn(
-              "flex-1 py-2 text-sm font-medium transition-colors",
-              mode === m ? "bg-blue-600 text-white" : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-            )}
-          >
-            {m === "figure" ? "🖼️ Figures" : "📋 Recommendations"}
-          </button>
-        ))}
-      </div>
+      {/* Mode toggle — only show when not locked by session */}
+      {!isSessionMode && (
+        <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+          {(["figure", "recommendation"] as Mode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => mode !== m && switchMode(m)}
+              className={cn(
+                "flex-1 py-2 text-sm font-medium transition-colors",
+                mode === m ? "bg-blue-600 text-white" : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+              )}
+            >
+              {m === "figure" ? "🖼️ Figures" : "📋 Recommendations"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Session label when mode is locked */}
+      {isSessionMode && (
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <span>{mode === "figure" ? "🖼️ Figures" : "📋 Recommendations"}</span>
+          {paramSlugs && (
+            <>
+              <span>·</span>
+              <span>{paramSlugs.split(",").length} guideline{paramSlugs.split(",").length !== 1 ? "s" : ""}</span>
+            </>
+          )}
+          {!paramSlugs && <span>· All guidelines</span>}
+          <span>· Random</span>
+        </div>
+      )}
 
       {/* Card */}
       {loading || !current ? (
@@ -239,5 +270,17 @@ export default function RandomStudyPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function RandomStudyPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <RandomStudyInner />
+    </Suspense>
   );
 }
