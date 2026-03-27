@@ -45,8 +45,8 @@ export default function SessionLauncher({ guidelines }: { guidelines: Guideline[
   }
 
   function startSession() {
-    const slugs = selected.size === 0 ? [] : Array.from(selected);
-    const isAllOrNone = slugs.length === 0 || slugs.length === guidelines.length;
+    const slugs = Array.from(selected);
+    const isAll = slugs.length === guidelines.length;
 
     // Single guideline + ordered → existing browser pages
     if (slugs.length === 1 && effectiveOrder === "ordered") {
@@ -62,13 +62,13 @@ export default function SessionLauncher({ guidelines }: { guidelines: Guideline[
     // Random mode or multi-guideline → random page with params
     const params = new URLSearchParams();
     params.set("mode", mode === "figures" ? "figure" : "recommendation");
-    if (!isAllOrNone) {
+    if (!isAll) {
       params.set("slugs", slugs.join(","));
     }
     router.push(`/study/random?${params.toString()}`);
   }
 
-  const canStart = true; // 0 selected = all guidelines
+  const canStart = selected.size > 0;
 
   return (
     <div className="max-w-xl mx-auto px-4 py-6 space-y-6">
@@ -127,9 +127,6 @@ export default function SessionLauncher({ guidelines }: { guidelines: Guideline[
           })}
         </div>
 
-        {selected.size === 0 && (
-          <p className="text-xs text-slate-400 text-center">No selection = all guidelines</p>
-        )}
       </div>
 
       {/* Mode selection */}
